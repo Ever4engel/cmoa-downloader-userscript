@@ -14,7 +14,6 @@
 // @require      https://kit.fontawesome.com/63c38a0de9.js
 // ==/UserScript==
 
-
 function downloadPage(pageNumber) {
     const speedbinb = SpeedBinb.getInstance('content');
     const pageInfo = speedbinb.Xt.vn.page;
@@ -56,7 +55,7 @@ function downloadComic() {
         while (document.querySelector(`#content-p${nextPage}`)) {
             const imgs = document.querySelectorAll(`#content-p${nextPage} img`);
             const blobs = Array.from(imgs).map((img) => img.src);
-            const page = makePage(imgs);
+            downloadPage(imgs);
         }
         speedbinb.moveTo(nextPage - 1);
     }
@@ -84,6 +83,7 @@ function addDownloadSidebar() {
     sidebar.id = 'download-sidebar';
     sidebar.classList.add('offcanvas');
     sidebar.classList.add('offcanvas-end');
+    sidebar.classList.add('rounded-start');
     sidebar.setAttribute('tabindex', '-1');
     sidebar.setAttribute('aria-labelledby', '#download-sidebar-title');
 
@@ -119,6 +119,15 @@ function addDownloadSidebar() {
           </div>
      </div>`;
     document.body.append(sidebar);
+
+    const sidebarCss =
+    `#download-sidebar .offcanvas-header {
+         border-bottom: 1px solid var(--bs-gray-300);
+     }
+     #download-sidebar h5 {
+         margin-bottom: 0;
+     }`;
+    GM_addStyle(sidebarCss);
 }
 
 function addDownloadTab() {
