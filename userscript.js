@@ -12,7 +12,50 @@
 // @resource     bt https://cdn.jsdelivr.net/npm/bootstrap@5.1.0/dist/css/bootstrap.min.css
 // @require      https://cdn.jsdelivr.net/npm/bootstrap@5.1.0/dist/js/bootstrap.bundle.min.js
 // @require      https://kit.fontawesome.com/63c38a0de9.js
+// @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js
 // ==/UserScript==
+
+function validatePagesField() {
+    const speedbinb = SpeedBinb.getInstance('content');
+    const totalPages = speedbinb.total - 1;
+
+    const pagesField = document.querySelector('#pages-field');
+    const fieldValue = pagesField.value;
+    const pagesList = fieldValue.split(',');
+
+    const isValidPage = num => !isNaN(num) && (parseInt(num) > 0) && (parseInt(num) <= totalPages);
+    const isValidSingle = range => (range.length == 1) && isValidPage(range[0]);
+    const isValidRange = range => (range.length == 2) && range.every(isValidPage) && (parseInt(range[0]) < parseInt(range[1]));
+
+    for (const x of pagesList) {
+        let pages = x.split('-');
+        if (!isValidSingle(pages) && !isValidRange(pages)) {
+            pagesField.setCustomValidity("Invalid page range, use eg. 1-5, 8, 11-13");
+            return;
+        }
+    }
+    pagesField.setCustomValidity("");
+}
+
+function setUpValidation() {
+  'use strict'
+
+  // Fetch all the forms we want to apply custom Bootstrap validation styles to
+  var forms = document.querySelectorAll('.needs-validation')
+
+  // Loop over them and prevent submission
+  Array.prototype.slice.call(forms)
+    .forEach(function (form) {
+      form.addEventListener('submit', function (event) {
+        if (!form.checkValidity()) {
+          event.preventDefault()
+          event.stopPropagation()
+        }
+
+        form.classList.add('was-validated')
+      }, false)
+    })
+}
 
 function downloadPage(pageNumber) {
     const speedbinb = SpeedBinb.getInstance('content');
@@ -66,7 +109,7 @@ function addButton() {
     let div = document.createElement('div');
     div.style.position = 'absolute';
     div.style.left = '20%';
-    let button = document.createElement('button');
+    const button = document.createElement('button');
     button.innerHTML = 'Download';
     button.addEventListener('click', () => {
         downloadPage(1);
@@ -79,7 +122,7 @@ function addButton() {
 
 
 function addDownloadSidebar() {
-    let sidebar = document.createElement('div');
+    const sidebar = document.createElement('div');
     sidebar.id = 'download-sidebar';
     sidebar.classList.add('offcanvas');
     sidebar.classList.add('offcanvas-end');
@@ -97,18 +140,15 @@ function addDownloadSidebar() {
              <i class="fas fa-exclamation-triangle bi flex-shrink-0 me-2" width="24" height="24" role="img" aria-label="Warning"></i>
              <div style="padding-left: 0.5em">Do not close this tab or interact with the reader while download is in progress.</div>
          </div>
-         <form>
+         <form class="needs-validation" novalidate>
              <div class="mb-3">
                  <label for="folder-name-field" class="form-label">Download folder name</label>
                  <input type="text" id="folder-name-field" name="folder-name" class="form-control" placeholder="Leave blank for comic name">
              </div>
              <label for="pages-field" class="form-label">Pages</label>
-             <div class="input-group mb-3">
-                 <div class="input-group-text">
-                     <input class="form-check-input mt-0" type="checkbox" value="" name="all-pages-checkbox" aria-label="Checkbox for all pages">
-                     <label for="all-pages" class="form-check-label" style="padding-left: 0.5em">All</label>
-                 </div>
-                 <input type="text" id="pages-field" name="pages" class="form-control" placeholder="1-5, 8, 11-13">
+             <div class="mb-3">
+                 <input type="text" id="pages-field" name="pages" class="form-control" placeholder="eg. 1-5, 8, 11-13">
+                 <div class="invalid-feedback">Invalid page range, use eg. 1-5, 8, 11-13</div>
              </div>
              <div class="mb-3">
                  <button type="submit" class="btn btn-primary">Download</button>
@@ -119,6 +159,9 @@ function addDownloadSidebar() {
           </div>
      </div>`;
     document.body.append(sidebar);
+    const pagesField = document.querySelector('#pages-field');
+    pagesField.addEventListener('change', validatePagesField);
+    setUpValidation();
 
     const sidebarCss =
     `#download-sidebar .offcanvas-header {
@@ -166,6 +209,7 @@ function addDownloadTab() {
      }`;
     GM_addStyle(tabCss);
 }
+
 
 window.addEventListener('load', () => {
     GM_addStyle(GM_getResourceText("bt"));
