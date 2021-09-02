@@ -27,10 +27,15 @@ function getVolume() {
     return parseInt(__sreaderFunc__.contentInfo.items[0].ShopURL.split('/').at(-2));
 }
 
+function getPageCount() {
+    return SpeedBinb.getInstance('content').total - 1;
+}
+
 function setUpComicInfo() {
     const titleListItem = document.querySelector('#comic-title');
     const authorListItem = document.querySelector('#comic-author');
     const volumeListItem = document.querySelector('#comic-volume');
+    const pageCountListItem = document.querySelector('#comic-page-count');
 
     const titleDiv = document.createElement('div');
     titleDiv.innerText = getTitle();
@@ -46,6 +51,41 @@ function setUpComicInfo() {
     const volumeDiv = document.createElement('div');
     volumeDiv.innerText = getVolume();
     volumeListItem.appendChild(volumeDiv);
+
+    const pageCountDiv = document.createElement('div');
+    pageCountDiv.innerText = getPageCount();
+    pageCountListItem.appendChild(pageCountDiv);
+}
+
+function convertToFileName(string) {
+    return string.replace(/[/\\?%*:|"<>]/g, '-');
+}
+
+function setDefaultDownloadName() {
+    const downloadNameField = document.querySelector('#download-name-field');
+    downloadNameField.placeholder = convertToFileName(getTitle().concat(' ', getVolume()));
+}
+
+function isValidFileName(string) {
+    const regex = new RegExp('[/\\?%*:|"<>]', 'g');
+    return !regex.test(string);
+}
+
+function setUpDownloadSidebar() {
+    const isComicInfoInitialize = document.querySelector('#comic-title').childElementCount > 1;
+    if (!isComicInfoInitialize) {
+        setUpComicInfo();
+    }
+    setDefaultDownloadName();
+}
+
+function validateDownloadNameField() {
+    const downloadNameField = document.querySelector('#download-name-field');
+    if (isValidFileName(downloadNameField.value)) {
+        downloadNameField.setCustomValidity('');
+    } else {
+        downloadNameField.setCustomValidity('Special characters /\?%*:|"<>] are not allowed');
+    }
 }
 
 function validatePagesField() {
@@ -63,11 +103,11 @@ function validatePagesField() {
     for (const x of pagesList) {
         let pages = x.split('-');
         if (!isValidSingle(pages) && !isValidRange(pages)) {
-            pagesField.setCustomValidity("Invalid page range, use eg. 1-5, 8, 11-13");
+            pagesField.setCustomValidity('Invalid page range, use eg. 1-5, 8, 11-13');
             return;
         }
     }
-    pagesField.setCustomValidity("");
+    pagesField.setCustomValidity('');
 }
 
 function setUpValidation() {
@@ -183,7 +223,7 @@ function addDownloadTab() {
     tabAnchor.setAttribute('href', '#download-sidebar');
     tabAnchor.setAttribute('role', 'button');
     tabAnchor.setAttribute('aria-label', 'Open Download Options');
-    tabAnchor.addEventListener('click', setUpComicInfo);
+    tabAnchor.addEventListener('click', setUpDownloadSidebar);
 
     const tab = document.createElement('div');
     tab.id = 'download-tab';
@@ -243,11 +283,15 @@ function addDownloadSidebar() {
              <li class="list-group-item" id="comic-volume">
                  <div class="fw-bold">Volume</div>
              </li>
+             <li class="list-group-item" id="comic-page-count">
+                 <div class="fw-bold">Page Count</div>
+             </li>
          </ul>
          <form class="needs-validation" novalidate>
              <div class="mb-3">
-                 <label for="folder-name-field" class="form-label">Download folder name</label>
-                 <input type="text" id="folder-name-field" name="folder-name" class="form-control" placeholder="Leave blank for comic name">
+                 <label for="download-name-field" class="form-label">Download file name</label>
+                 <textarea type="text" id="download-name-field" name="download-name" class="form-control" placeholder="Leave blank for comic name"></textarea>
+                 <div class="invalid-feedback">Special characters /\?%*:|"<>] are not allowed</div>
              </div>
              <label for="pages-field" class="form-label">Pages</label>
              <div class="mb-3">
@@ -265,6 +309,8 @@ function addDownloadSidebar() {
     document.body.append(sidebar);
     const pagesField = document.querySelector('#pages-field');
     pagesField.addEventListener('change', validatePagesField);
+    const downloadNameField = document.querySelector('#download-name-field');
+    downloadNameField.addEventListener('change', validateDownloadNameField);
     setUpValidation();
     const form = document.querySelector('#download-sidebar form');
 
