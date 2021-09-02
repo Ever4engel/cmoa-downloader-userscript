@@ -15,6 +15,39 @@
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js
 // ==/UserScript==
 
+function getTitle() {
+    return __sreaderFunc__.contentInfo.items[0].Title;
+}
+
+function getAuthors() {
+    return __sreaderFunc__.contentInfo.items[0].Authors.map(x => x.Name);
+}
+
+function getVolume() {
+    return parseInt(__sreaderFunc__.contentInfo.items[0].ShopURL.split('/').at(-2));
+}
+
+function setUpComicInfo() {
+    const titleListItem = document.querySelector('#comic-title');
+    const authorListItem = document.querySelector('#comic-author');
+    const volumeListItem = document.querySelector('#comic-volume');
+
+    const titleDiv = document.createElement('div');
+    titleDiv.innerText = getTitle();
+    titleListItem.appendChild(titleDiv);
+
+    const authors = getAuthors();
+    for (let i = 0; i < authors.length; i++) {
+        const authorDiv = document.createElement('div');
+        authorDiv.innerText = authors[i];
+        authorListItem.appendChild(authorDiv);
+    }
+
+    const volumeDiv = document.createElement('div');
+    volumeDiv.innerText = getVolume();
+    volumeListItem.appendChild(volumeDiv);
+}
+
 function validatePagesField() {
     const speedbinb = SpeedBinb.getInstance('content');
     const totalPages = speedbinb.total - 1;
@@ -24,8 +57,8 @@ function validatePagesField() {
     const pagesList = fieldValue.split(',');
 
     const isValidPage = num => !isNaN(num) && (parseInt(num) > 0) && (parseInt(num) <= totalPages);
-    const isValidSingle = range => (range.length == 1) && isValidPage(range[0]);
-    const isValidRange = range => (range.length == 2) && range.every(isValidPage) && (parseInt(range[0]) < parseInt(range[1]));
+    const isValidSingle = range => (range.length === 1) && isValidPage(range[0]);
+    const isValidRange = range => (range.length === 2) && range.every(isValidPage) && (parseInt(range[0]) < parseInt(range[1]));
 
     for (const x of pagesList) {
         let pages = x.split('-');
@@ -55,6 +88,45 @@ function setUpValidation() {
         form.classList.add('was-validated')
       }, false)
     })
+}
+
+function generatePageArray() {
+    const pagesField = document.querySelector('#pages-field');
+    const fieldValue = pagesField.value;
+    const pagesList = fieldValue.split(',');
+    let pageArray = [];
+
+    for (const x of pagesList) {
+        let pages = x.split('-');
+        if (pages.length === 1) {
+            pageArray.push([parseInt(pages[0]), parseInt(pages[0])]);
+        } else if (pages.length === 2) {
+            pageArray.push([parseInt(pages[0]), parseInt(pages[1])]);
+        }
+    }
+
+    pageArray.sort((a, b) => b[0] - a[0]);
+    return pageArray;
+}
+
+function mergePageIntervals(pageArray) {
+    if (pageArray.length <= 1) {
+        return pageArray;
+    }
+    const start = 0, end = 1;
+    let result = [];
+    let newInterval = pageArray[0];
+    for (let i = 1; i < pageArray.length; i++) {
+        let currentInterval = pageArray[i];
+        if (currentInterval[start] <= newInterval[end]) {
+            newInterval[end] = Math.max(newInterval[end], currentInterval[end]);
+        } else {
+            result.push(newInterval);
+            newInterval = currentInterval;
+        }
+    }
+    result.push(newInterval);
+    return result;
 }
 
 function downloadPage(pageNumber) {
@@ -104,75 +176,6 @@ function downloadComic() {
     }
 }
 
-function addButton() {
-    const header = document.querySelector('#menu_header');
-    let div = document.createElement('div');
-    div.style.position = 'absolute';
-    div.style.left = '20%';
-    const button = document.createElement('button');
-    button.innerHTML = 'Download';
-    button.addEventListener('click', () => {
-        downloadPage(1);
-    });
-    button.classList.add('btn');
-    button.classList.add('btn-primary');
-    div.appendChild(button);
-    header.appendChild(div);
-}
-
-
-function addDownloadSidebar() {
-    const sidebar = document.createElement('div');
-    sidebar.id = 'download-sidebar';
-    sidebar.classList.add('offcanvas');
-    sidebar.classList.add('offcanvas-end');
-    sidebar.classList.add('rounded-start');
-    sidebar.setAttribute('tabindex', '-1');
-    sidebar.setAttribute('aria-labelledby', '#download-sidebar-title');
-
-    sidebar.innerHTML =
-    `<div class="offcanvas-header">
-         <h5 id="download-sidebar-title">Download Options</h5>
-         <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
-     </div>
-     <div class="offcanvas-body">
-         <div class="alert alert-warning d-flex align-items-center" role="alert">
-             <i class="fas fa-exclamation-triangle bi flex-shrink-0 me-2" width="24" height="24" role="img" aria-label="Warning"></i>
-             <div style="padding-left: 0.5em">Do not close this tab or interact with the reader while download is in progress.</div>
-         </div>
-         <form class="needs-validation" novalidate>
-             <div class="mb-3">
-                 <label for="folder-name-field" class="form-label">Download folder name</label>
-                 <input type="text" id="folder-name-field" name="folder-name" class="form-control" placeholder="Leave blank for comic name">
-             </div>
-             <label for="pages-field" class="form-label">Pages</label>
-             <div class="mb-3">
-                 <input type="text" id="pages-field" name="pages" class="form-control" placeholder="eg. 1-5, 8, 11-13">
-                 <div class="invalid-feedback">Invalid page range, use eg. 1-5, 8, 11-13</div>
-             </div>
-             <div class="mb-3">
-                 <button type="submit" class="btn btn-primary">Download</button>
-             </div>
-          </form>
-          <div class="progress">
-              <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 25%;" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100"></div>
-          </div>
-     </div>`;
-    document.body.append(sidebar);
-    const pagesField = document.querySelector('#pages-field');
-    pagesField.addEventListener('change', validatePagesField);
-    setUpValidation();
-
-    const sidebarCss =
-    `#download-sidebar .offcanvas-header {
-         border-bottom: 1px solid var(--bs-gray-300);
-     }
-     #download-sidebar h5 {
-         margin-bottom: 0;
-     }`;
-    GM_addStyle(sidebarCss);
-}
-
 function addDownloadTab() {
     const tabAnchor = document.createElement('a');
     tabAnchor.id = 'download-tab-anchor';
@@ -180,6 +183,7 @@ function addDownloadTab() {
     tabAnchor.setAttribute('href', '#download-sidebar');
     tabAnchor.setAttribute('role', 'button');
     tabAnchor.setAttribute('aria-label', 'Open Download Options');
+    tabAnchor.addEventListener('click', setUpComicInfo);
 
     const tab = document.createElement('div');
     tab.id = 'download-tab';
@@ -210,6 +214,69 @@ function addDownloadTab() {
     GM_addStyle(tabCss);
 }
 
+function addDownloadSidebar() {
+    const sidebar = document.createElement('div');
+    sidebar.id = 'download-sidebar';
+    sidebar.classList.add('offcanvas');
+    sidebar.classList.add('offcanvas-end');
+    sidebar.classList.add('rounded-start');
+    sidebar.setAttribute('tabindex', '-1');
+    sidebar.setAttribute('aria-labelledby', '#download-sidebar-title');
+
+    sidebar.innerHTML =
+    `<div class="offcanvas-header">
+         <h5 id="download-sidebar-title">Download Options</h5>
+         <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+     </div>
+     <div class="offcanvas-body">
+         <div class="alert alert-warning d-flex align-items-center" role="alert">
+             <i class="fas fa-exclamation-triangle bi flex-shrink-0 me-2" width="24" height="24" role="img" aria-label="Warning"></i>
+             <div style="padding-left: 0.5em">Do not close this tab or interact with the reader while download is in progress.</div>
+         </div>
+         <ul class="list-group mb-3">
+             <li class="list-group-item" id="comic-title">
+                 <div class="fw-bold">Title</div>
+             </li>
+             <li class="list-group-item" id="comic-author">
+                 <div class="fw-bold">Author</div>
+             </li>
+             <li class="list-group-item" id="comic-volume">
+                 <div class="fw-bold">Volume</div>
+             </li>
+         </ul>
+         <form class="needs-validation" novalidate>
+             <div class="mb-3">
+                 <label for="folder-name-field" class="form-label">Download folder name</label>
+                 <input type="text" id="folder-name-field" name="folder-name" class="form-control" placeholder="Leave blank for comic name">
+             </div>
+             <label for="pages-field" class="form-label">Pages</label>
+             <div class="mb-3">
+                 <input type="text" id="pages-field" name="pages" class="form-control" placeholder="eg. 1-5, 8, 11-13">
+                 <div class="invalid-feedback">Invalid page range, use eg. 1-5, 8, 11-13</div>
+             </div>
+             <div class="mb-3">
+                 <button type="submit" class="btn btn-primary">Download</button>
+             </div>
+          </form>
+          <div class="progress">
+              <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 25%;" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100"></div>
+          </div>
+     </div>`;
+    document.body.append(sidebar);
+    const pagesField = document.querySelector('#pages-field');
+    pagesField.addEventListener('change', validatePagesField);
+    setUpValidation();
+    const form = document.querySelector('#download-sidebar form');
+
+    const sidebarCss =
+    `#download-sidebar .offcanvas-header {
+         border-bottom: 1px solid var(--bs-gray-300);
+     }
+     #download-sidebar h5 {
+         margin-bottom: 0;
+     }`;
+    GM_addStyle(sidebarCss);
+}
 
 window.addEventListener('load', () => {
     GM_addStyle(GM_getResourceText("bt"));
