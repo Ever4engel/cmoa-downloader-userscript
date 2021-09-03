@@ -71,7 +71,7 @@ function isValidFileName(string) {
     return !regex.test(string);
 }
 
-function setUpDownloadSidebar() {
+function setUpDownloadSidebarInfo() {
     const isComicInfoInitialize = document.querySelector('#comic-title').childElementCount > 1;
     if (!isComicInfoInitialize) {
         setUpComicInfo();
@@ -131,8 +131,17 @@ function setUpValidation() {
 }
 
 function generatePageArray() {
+    const isEmpty = string => !string.trim().length;
+
     const pagesField = document.querySelector('#pages-field');
-    const fieldValue = pagesField.value;
+    let fieldValue = pagesField.value;
+
+    if (isEmpty(fieldValue)) {
+        const speedbinb = SpeedBinb.getInstance('content');
+        const totalPages = speedbinb.total - 1;
+        return [[1, totalPages]];
+    }
+
     const pagesList = fieldValue.split(',');
     let pageArray = [];
 
@@ -169,6 +178,36 @@ function mergePageIntervals(pageArray) {
     return result;
 }
 
+function getPageIntervals() {
+    return mergePageIntervals(generatePageArray());
+}
+
+function setUpDownloadSidebarForm() {
+    const pagesField = document.querySelector('#pages-field');
+    pagesField.addEventListener('change', validatePagesField);
+
+    const downloadNameField = document.querySelector('#download-name-field');
+    downloadNameField.addEventListener('change', validateDownloadNameField);
+
+    setUpValidation();
+
+    const form = document.querySelector('#download-sidebar form');
+    form.addEventListener('submit', submitForm);
+}
+
+function setUpKeyboardEventListeners() {
+    const stopProp = function(e) { e.stopPropagation(); };
+    const sidebar = document.querySelector('#download-sidebar');
+    sidebar.addEventListener('shown.bs.offcanvas', function() {
+        document.addEventListener('keydown', stopProp, true);
+        document.addEventListener('wheel', stopProp, true);
+    });
+    sidebar.addEventListener('hidden.bs.offcanvas', function() {
+        document.removeEventListener('keydown', stopProp, true);
+        document.removeEventListener('wheel', stopProp, true);
+    });
+}
+
 function downloadPage(pageNumber) {
     const speedbinb = SpeedBinb.getInstance('content');
     const pageInfo = speedbinb.Xt.vn.page;
@@ -198,22 +237,44 @@ function downloadPage(pageNumber) {
     GM_download(details);
 }
 
-function downloadComic() {
-    const speedbinb = SpeedBinb.getInstance('content');
-    let nextPage = 1;
-    // const totalPages = speedbinb.total - 1;
-    const totalPages = 1;
-
-    speedbinb.moveTo(0);
-
-    while (nextPage <= totalPages) {
-        while (document.querySelector(`#content-p${nextPage}`)) {
-            const imgs = document.querySelectorAll(`#content-p${nextPage} img`);
-            const blobs = Array.from(imgs).map((img) => img.src);
-            downloadPage(imgs);
-        }
-        speedbinb.moveTo(nextPage - 1);
+function testDownload(pageNumber) {
+    const content = document.querySelector(`#content-p${pageNumber}`);
+    if (content) {
+        console.log(`Downloaded page ${pageNumber}`);
+        this.dispatchEvent(new CustomEvent('downloadProcessed', { bubbles: true, detail: { successful: true } }))
+    } else {
+        console.log(`Error: page ${pageNumber} not loaded yet`);
+        this.dispatchEvent(new CustomEvent('downloadProcessed', { bubbles: true, detail: { successful: false } }))
     }
+}
+
+function downloadComic(pageIntervals) {
+    const speedbinb = SpeedBinb.getInstance('content');
+    for (let i = 0; i < pageIntervals.length; i++) {
+        const interval = pageIntervals[i], start = 0, end = 1;
+        let nextPage = interval[start];
+        document.addEventListener('downloadProcessed', (e) => {
+            if (e.detail.successful) {
+                nextPage++;
+            }
+        });
+        while (nextPage <= interval[end]) {
+            console.log(nextPage);
+            if (document.querySelector(`#content-p${nextPage}`)) {
+                testDownload(nextPage);
+            } else {
+                const downloadFunc = function() { testDownload(nextPage); speedbinb.removeEventListener('onPageRendered', downloadFunc); };
+                speedbinb.moveTo(nextPage - 1);
+                speedbinb.addEventListener('onPageRendered', downloadFunc);
+            }
+        }
+    }
+}
+
+function submitForm(e) {
+    e.preventDefault();
+    console.log('Form submitted');
+    downloadComic(getPageIntervals());
 }
 
 function addDownloadTab() {
@@ -223,7 +284,7 @@ function addDownloadTab() {
     tabAnchor.setAttribute('href', '#download-sidebar');
     tabAnchor.setAttribute('role', 'button');
     tabAnchor.setAttribute('aria-label', 'Open Download Options');
-    tabAnchor.addEventListener('click', setUpDownloadSidebar);
+    tabAnchor.addEventListener('click', setUpDownloadSidebarInfo);
 
     const tab = document.createElement('div');
     tab.id = 'download-tab';
@@ -271,7 +332,7 @@ function addDownloadSidebar() {
      <div class="offcanvas-body">
          <div class="alert alert-warning d-flex align-items-center" role="alert">
              <i class="fas fa-exclamation-triangle bi flex-shrink-0 me-2" width="24" height="24" role="img" aria-label="Warning"></i>
-             <div style="padding-left: 0.5em">Do not close this tab or interact with the reader while download is in progress.</div>
+             <div style="padding-left: 0.5em">Interacting with the reader is disabled while sidebar is open.</div>
          </div>
          <ul class="list-group mb-3">
              <li class="list-group-item" id="comic-title">
@@ -307,15 +368,17 @@ function addDownloadSidebar() {
           </div>
      </div>`;
     document.body.append(sidebar);
-    const pagesField = document.querySelector('#pages-field');
-    pagesField.addEventListener('change', validatePagesField);
-    const downloadNameField = document.querySelector('#download-name-field');
-    downloadNameField.addEventListener('change', validateDownloadNameField);
-    setUpValidation();
-    const form = document.querySelector('#download-sidebar form');
+    setUpDownloadSidebarForm();
+    setUpKeyboardEventListeners();
 
     const sidebarCss =
-    `#download-sidebar .offcanvas-header {
+    `#download-sidebar {
+         user-select: text;
+         -moz-user-select: text;
+         -webkit-user-select: text;
+         -ms-user-select: text;
+     }
+     #download-sidebar .offcanvas-header {
          border-bottom: 1px solid var(--bs-gray-300);
      }
      #download-sidebar h5 {
