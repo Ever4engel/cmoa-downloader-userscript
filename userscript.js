@@ -20,7 +20,7 @@ function getTitle() {
 }
 
 function getAuthors() {
-    return __sreaderFunc__.contentInfo.items[0].Authors.map(x => x.Name);
+    return __sreaderFunc__.contentInfo.items[0].Authors.map(x => x.Name); // Returns array of authors, ex. ['Author1', 'Author2']
 }
 
 function getVolume() {
@@ -55,6 +55,9 @@ function setUpComicInfo() {
     const pageCountDiv = document.createElement('div');
     pageCountDiv.innerText = getPageCount();
     pageCountListItem.appendChild(pageCountDiv);
+
+    const speedbinb = SpeedBinb.getInstance('content');
+    speedbinb.removeEventListener('onPageRendered', setUpComicInfo);
 }
 
 function convertToFileName(string) {
@@ -71,6 +74,7 @@ function isValidFileName(string) {
     return !regex.test(string);
 }
 
+/*
 function setUpDownloadSidebarInfo() {
     const isComicInfoInitialize = document.querySelector('#comic-title').childElementCount > 1;
     if (!isComicInfoInitialize) {
@@ -78,6 +82,7 @@ function setUpDownloadSidebarInfo() {
     }
     setDefaultDownloadName();
 }
+*/
 
 function validateDownloadNameField() {
     const downloadNameField = document.querySelector('#download-name-field');
@@ -284,7 +289,7 @@ function addDownloadTab() {
     tabAnchor.setAttribute('href', '#download-sidebar');
     tabAnchor.setAttribute('role', 'button');
     tabAnchor.setAttribute('aria-label', 'Open Download Options');
-    tabAnchor.addEventListener('click', setUpDownloadSidebarInfo);
+    // tabAnchor.addEventListener('click', setUpDownloadSidebarInfo);
 
     const tab = document.createElement('div');
     tab.id = 'download-tab';
@@ -391,4 +396,6 @@ window.addEventListener('load', () => {
     GM_addStyle(GM_getResourceText("bt"));
     addDownloadSidebar();
     addDownloadTab();
+    const speedbinb = SpeedBinb.getInstance('content');
+    speedbinb.addEventListener('onPageRendered', setUpComicInfo);
 });
