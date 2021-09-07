@@ -15,23 +15,94 @@
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js
 // ==/UserScript==
 
+function convertToValidFileName(string) {
+    return string.replace(/[/\\?%*:|"<>]/g, '-');
+}
+
+function isValidFileName(string) {
+    const regex = new RegExp('[/\\?%*:|"<>]', 'g');
+    return !regex.test(string);
+}
+
 function getTitle() {
-    return __sreaderFunc__.contentInfo.items[0].Title;
+    try {
+        return __sreaderFunc__.contentInfo.items[0].Title;
+    } catch (error) {
+        return null;
+    }
 }
 
 function getAuthors() {
-    return __sreaderFunc__.contentInfo.items[0].Authors.map(x => x.Name); // Returns array of authors, ex. ['Author1', 'Author2']
+    try {
+        return __sreaderFunc__.contentInfo.items[0].Authors[0].Name.split('/'); // Returns array of authors, ex. ['Author1', 'Author2']
+    } catch (error) {
+        return null;
+    }
 }
 
 function getVolume() {
-    return parseInt(__sreaderFunc__.contentInfo.items[0].ShopURL.split('/').at(-2));
+    try {
+        return parseInt(__sreaderFunc__.contentInfo.items[0].ShopURL.split('/').at(-2));
+    } catch (error) {
+        return null;
+    }
 }
 
 function getPageCount() {
-    return SpeedBinb.getInstance('content').total - 1;
+    try {
+        return SpeedBinb.getInstance('content').total - 1;
+    } catch (error) {
+        return null;
+    }
 }
 
-function setUpComicInfo() {
+function getPageIntervals() {
+    const isEmpty = string => !string.trim().length;
+
+    const pagesField = document.querySelector('#pages-field');
+    let fieldValue = pagesField.value;
+
+    if (isEmpty(fieldValue)) {
+        const speedbinb = SpeedBinb.getInstance('content');
+        const totalPages = speedbinb.total - 1;
+        return [[1, totalPages]];
+    }
+
+    const pagesList = fieldValue.split(',');
+    let pageIntervals = [];
+
+    for (const x of pagesList) {
+        let pages = x.split('-');
+        if (pages.length === 1) {
+            pageIntervals.push([parseInt(pages[0]), parseInt(pages[0])]);
+        } else if (pages.length === 2) {
+            pageIntervals.push([parseInt(pages[0]), parseInt(pages[1])]);
+        }
+    }
+
+    if (pageIntervals.length <= 1) {
+        return pageIntervals;
+    }
+
+    pageIntervals.sort((a, b) => b[0] - a[0]);
+
+    const start = 0, end = 1;
+    let mergedIntervals = [];
+    let newInterval = pageIntervals[0];
+    for (let i = 1; i < pageIntervals.length; i++) {
+        let currentInterval = pageIntervals[i];
+        if (currentInterval[start] <= newInterval[end]) {
+            newInterval[end] = Math.max(newInterval[end], currentInterval[end]);
+        } else {
+            mergedIntervals.push(newInterval);
+            newInterval = currentInterval;
+        }
+    }
+    mergedIntervals.push(newInterval);
+    return mergedIntervals;
+}
+
+function initializeComicInfo() {
     const titleListItem = document.querySelector('#comic-title');
     const authorListItem = document.querySelector('#comic-author');
     const volumeListItem = document.querySelector('#comic-volume');
@@ -42,6 +113,10 @@ function setUpComicInfo() {
     titleListItem.appendChild(titleDiv);
 
     const authors = getAuthors();
+    if (authors.length > 1) {
+        const authorLabel = authorListItem.querySelector('.fw-bold');
+        authorLabel.innerText = 'Authors';
+    }
     for (let i = 0; i < authors.length; i++) {
         const authorDiv = document.createElement('div');
         authorDiv.innerText = authors[i];
@@ -55,34 +130,20 @@ function setUpComicInfo() {
     const pageCountDiv = document.createElement('div');
     pageCountDiv.innerText = getPageCount();
     pageCountListItem.appendChild(pageCountDiv);
+}
+
+function initializeDownloadName() {
+    const downloadNameField = document.querySelector('#download-name-field');
+    downloadNameField.placeholder = convertToValidFileName(getTitle().concat(' ', getVolume()));
+}
+
+function initializeSidebar() {
+    initializeComicInfo();
+    initializeDownloadName();
 
     const speedbinb = SpeedBinb.getInstance('content');
-    speedbinb.removeEventListener('onPageRendered', setUpComicInfo);
+    speedbinb.removeEventListener('onPageRendered', initializeSidebar); // Remove event listener to prevent info from being added again
 }
-
-function convertToFileName(string) {
-    return string.replace(/[/\\?%*:|"<>]/g, '-');
-}
-
-function setDefaultDownloadName() {
-    const downloadNameField = document.querySelector('#download-name-field');
-    downloadNameField.placeholder = convertToFileName(getTitle().concat(' ', getVolume()));
-}
-
-function isValidFileName(string) {
-    const regex = new RegExp('[/\\?%*:|"<>]', 'g');
-    return !regex.test(string);
-}
-
-/*
-function setUpDownloadSidebarInfo() {
-    const isComicInfoInitialize = document.querySelector('#comic-title').childElementCount > 1;
-    if (!isComicInfoInitialize) {
-        setUpComicInfo();
-    }
-    setDefaultDownloadName();
-}
-*/
 
 function validateDownloadNameField() {
     const downloadNameField = document.querySelector('#download-name-field');
@@ -115,92 +176,53 @@ function validatePagesField() {
     pagesField.setCustomValidity('');
 }
 
-function setUpValidation() {
+function preventDefaultValidation() {
   'use strict'
 
   // Fetch all the forms we want to apply custom Bootstrap validation styles to
-  var forms = document.querySelectorAll('.needs-validation')
+  var forms = document.querySelectorAll('.needs-validation');
 
   // Loop over them and prevent submission
   Array.prototype.slice.call(forms)
-    .forEach(function (form) {
-      form.addEventListener('submit', function (event) {
-        if (!form.checkValidity()) {
-          event.preventDefault()
-          event.stopPropagation()
-        }
-
-        form.classList.add('was-validated')
+      .forEach(function (form) {
+          form.addEventListener('submit', function (event) {
+              if (!form.checkValidity()) {
+                  event.preventDefault();
+                  event.stopPropagation();
+              } else {
+                  submitForm(event);
+              }
+              form.classList.add('was-validated');
       }, false)
-    })
+    });
 }
 
-function generatePageArray() {
-    const isEmpty = string => !string.trim().length;
-
-    const pagesField = document.querySelector('#pages-field');
-    let fieldValue = pagesField.value;
-
-    if (isEmpty(fieldValue)) {
-        const speedbinb = SpeedBinb.getInstance('content');
-        const totalPages = speedbinb.total - 1;
-        return [[1, totalPages]];
+function submitForm(e) {
+    e.preventDefault();
+    console.log('Form submitted');
+    const downloadNameField = document.querySelector('#download-name-field');
+    if (!downloadNameField.value) {
+        downloadNameField.value = downloadNameField.placeholder;
     }
-
-    const pagesList = fieldValue.split(',');
-    let pageArray = [];
-
-    for (const x of pagesList) {
-        let pages = x.split('-');
-        if (pages.length === 1) {
-            pageArray.push([parseInt(pages[0]), parseInt(pages[0])]);
-        } else if (pages.length === 2) {
-            pageArray.push([parseInt(pages[0]), parseInt(pages[1])]);
-        }
+    const form = document.querySelector('#download-sidebar form');
+    const elements = form.elements;
+    for (let i = 0; i < elements.length; i++) {
+        elements[i].readOnly = true;
     }
-
-    pageArray.sort((a, b) => b[0] - a[0]);
-    return pageArray;
+    downloadComic(getPageIntervals());
 }
 
-function mergePageIntervals(pageArray) {
-    if (pageArray.length <= 1) {
-        return pageArray;
-    }
-    const start = 0, end = 1;
-    let result = [];
-    let newInterval = pageArray[0];
-    for (let i = 1; i < pageArray.length; i++) {
-        let currentInterval = pageArray[i];
-        if (currentInterval[start] <= newInterval[end]) {
-            newInterval[end] = Math.max(newInterval[end], currentInterval[end]);
-        } else {
-            result.push(newInterval);
-            newInterval = currentInterval;
-        }
-    }
-    result.push(newInterval);
-    return result;
-}
-
-function getPageIntervals() {
-    return mergePageIntervals(generatePageArray());
-}
-
-function setUpDownloadSidebarForm() {
+function setUpDownloadForm() {
     const pagesField = document.querySelector('#pages-field');
     pagesField.addEventListener('change', validatePagesField);
 
     const downloadNameField = document.querySelector('#download-name-field');
     downloadNameField.addEventListener('change', validateDownloadNameField);
 
-    setUpValidation();
-
-    const form = document.querySelector('#download-sidebar form');
-    form.addEventListener('submit', submitForm);
+    preventDefaultValidation();
 }
 
-function setUpKeyboardEventListeners() {
+function addSidebarEventListeners() {
     const stopProp = function(e) { e.stopPropagation(); };
     const sidebar = document.querySelector('#download-sidebar');
     sidebar.addEventListener('shown.bs.offcanvas', function() {
@@ -213,6 +235,7 @@ function setUpKeyboardEventListeners() {
     });
 }
 
+/*
 function downloadPage(pageNumber) {
     const speedbinb = SpeedBinb.getInstance('content');
     const pageInfo = speedbinb.Xt.vn.page;
@@ -275,11 +298,74 @@ function downloadComic(pageIntervals) {
         }
     }
 }
+*/
 
-function submitForm(e) {
-    e.preventDefault();
-    console.log('Form submitted');
-    downloadComic(getPageIntervals());
+function getPageBlob(pageNumber) {
+    return new Promise(function(resolve, reject) {
+        const speedbinb = SpeedBinb.getInstance('content');
+        const pageInfo = speedbinb.Xt.vn.page;
+        const pageHeight = pageInfo[pageNumber].image.orgheight;
+        const pageWidth = pageInfo[pageNumber].image.orgwidth;
+
+        const imgs = document.querySelectorAll(`#content-p${pageNumber} img`);
+
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.height = pageHeight;
+        canvas.width = pageWidth;
+
+        const topY = pageHeight * (parseFloat(imgs[0].parentElement.style.top) / 100);
+        const middleY = pageHeight * (parseFloat(imgs[1].parentElement.style.top) / 100);
+        const bottomY = pageHeight * (parseFloat(imgs[2].parentElement.style.top) / 100);
+
+        ctx.drawImage(imgs[0], 0, topY);
+        ctx.drawImage(imgs[1], 0, middleY);
+        ctx.drawImage(imgs[2], 0, bottomY);
+
+        canvas.toBlob(blob => { resolve(blob); }, 'image/jpeg', 1.0);
+    });
+}
+
+function moveToPage(pageNumber) {
+    return new Promise(function(resolve, reject) {
+        const speedbinb = SpeedBinb.getInstance('content');
+        const resolveFunc = () => { resolve(); speedbinb.removeEventListener('onPageRendered', resolveFunc); };
+        speedbinb.addEventListener('onPageRendered', resolveFunc);
+        speedbinb.moveTo(pageNumber - 1);
+    });
+}
+
+async function downloadComic(pageIntervals) {
+    const zip = new JSZip();
+    const downloadName = document.querySelector('#download-name-field').value;
+
+    const speedbinb = SpeedBinb.getInstance('content');
+    for (let i = 0; i < pageIntervals.length; i++) {
+        const interval = pageIntervals[i], start = 0, end = 1;
+
+        for (let nextPage = interval[start]; nextPage <= interval[end]; nextPage++) {
+            console.log(nextPage);
+            if (document.querySelector(`#content-p${nextPage}`)) {
+                const pageBlob = await getPageBlob(nextPage);
+                console.log(URL.createObjectURL(pageBlob));
+                zip.file(`${nextPage}.jpeg`, pageBlob);
+            } else {
+                await moveToPage(nextPage);
+                const pageBlob = await getPageBlob(nextPage);
+                console.log(URL.createObjectURL(pageBlob));
+                zip.file(`${nextPage}.jpeg`, pageBlob);
+            }
+        }
+    }
+
+    zip.generateAsync({ type: 'blob' })
+        .then(function(content) {
+            const details = {
+                'url': URL.createObjectURL(content),
+                'name': `${downloadName}.zip`
+            };
+            GM_download(details);
+    });
 }
 
 function addDownloadTab() {
@@ -289,7 +375,6 @@ function addDownloadTab() {
     tabAnchor.setAttribute('href', '#download-sidebar');
     tabAnchor.setAttribute('role', 'button');
     tabAnchor.setAttribute('aria-label', 'Open Download Options');
-    // tabAnchor.addEventListener('click', setUpDownloadSidebarInfo);
 
     const tab = document.createElement('div');
     tab.id = 'download-tab';
@@ -373,8 +458,8 @@ function addDownloadSidebar() {
           </div>
      </div>`;
     document.body.append(sidebar);
-    setUpDownloadSidebarForm();
-    setUpKeyboardEventListeners();
+    setUpDownloadForm();
+    addSidebarEventListeners();
 
     const sidebarCss =
     `#download-sidebar {
@@ -397,5 +482,5 @@ window.addEventListener('load', () => {
     addDownloadSidebar();
     addDownloadTab();
     const speedbinb = SpeedBinb.getInstance('content');
-    speedbinb.addEventListener('onPageRendered', setUpComicInfo);
+    speedbinb.addEventListener('onPageRendered', initializeSidebar);
 });
