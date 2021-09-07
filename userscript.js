@@ -304,8 +304,8 @@ function getPageBlob(pageNumber) {
     return new Promise(function(resolve, reject) {
         const speedbinb = SpeedBinb.getInstance('content');
         const pageInfo = speedbinb.Xt.vn.page;
-        const pageHeight = pageInfo[pageNumber].image.orgheight;
-        const pageWidth = pageInfo[pageNumber].image.orgwidth;
+        const pageHeight = pageInfo[pageNumber - 1].image.orgheight;
+        const pageWidth = pageInfo[pageNumber - 1].image.orgwidth;
 
         const imgs = document.querySelectorAll(`#content-p${pageNumber} img`);
 
@@ -345,7 +345,7 @@ async function downloadComic(pageIntervals) {
 
         for (let nextPage = interval[start]; nextPage <= interval[end]; nextPage++) {
             console.log(nextPage);
-            if (document.querySelector(`#content-p${nextPage}`)) {
+            if (document.querySelector(`#content-p${nextPage} img`)) {
                 const pageBlob = await getPageBlob(nextPage);
                 console.log(URL.createObjectURL(pageBlob));
                 zip.file(`${nextPage}.jpeg`, pageBlob);
@@ -366,6 +366,12 @@ async function downloadComic(pageIntervals) {
             };
             GM_download(details);
     });
+
+    const form = document.querySelector('#download-sidebar form');
+    const elements = form.elements;
+    for (let i = 0; i < elements.length; i++) {
+        elements[i].readOnly = false;
+    }
 }
 
 function addDownloadTab() {
