@@ -64,7 +64,7 @@ function getPageIntervals() {
 
     if (isEmpty(fieldValue)) {
         const speedbinb = SpeedBinb.getInstance('content');
-        const totalPages = speedbinb.total - 1;
+        const totalPages = speedbinb.Xt.totalContentPage;
         return [[1, totalPages]];
     }
 
@@ -235,71 +235,6 @@ function addSidebarEventListeners() {
     });
 }
 
-/*
-function downloadPage(pageNumber) {
-    const speedbinb = SpeedBinb.getInstance('content');
-    const pageInfo = speedbinb.Xt.vn.page;
-    const pageHeight = pageInfo[pageNumber].image.orgheight;
-    const pageWidth = pageInfo[pageNumber].image.orgwidth;
-
-    const imgs = document.querySelectorAll(`#content-p${pageNumber} img`);
-
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.height = pageHeight;
-    canvas.width = pageWidth;
-
-    const topY = pageHeight * (parseFloat(imgs[0].parentElement.style.top) / 100);
-    const middleY = pageHeight * (parseFloat(imgs[1].parentElement.style.top) / 100);
-    const bottomY = pageHeight * (parseFloat(imgs[2].parentElement.style.top) / 100);
-
-    ctx.drawImage(imgs[0], 0, topY);
-    ctx.drawImage(imgs[1], 0, middleY);
-    ctx.drawImage(imgs[2], 0, bottomY);
-
-    const blob = canvas.toDataURL('image/jpeg', 1.0);
-    const details = {
-        'url': blob,
-        'name': `${pageNumber}.jpeg`
-    };
-    GM_download(details);
-}
-
-function testDownload(pageNumber) {
-    const content = document.querySelector(`#content-p${pageNumber}`);
-    if (content) {
-        console.log(`Downloaded page ${pageNumber}`);
-        this.dispatchEvent(new CustomEvent('downloadProcessed', { bubbles: true, detail: { successful: true } }))
-    } else {
-        console.log(`Error: page ${pageNumber} not loaded yet`);
-        this.dispatchEvent(new CustomEvent('downloadProcessed', { bubbles: true, detail: { successful: false } }))
-    }
-}
-
-function downloadComic(pageIntervals) {
-    const speedbinb = SpeedBinb.getInstance('content');
-    for (let i = 0; i < pageIntervals.length; i++) {
-        const interval = pageIntervals[i], start = 0, end = 1;
-        let nextPage = interval[start];
-        document.addEventListener('downloadProcessed', (e) => {
-            if (e.detail.successful) {
-                nextPage++;
-            }
-        });
-        while (nextPage <= interval[end]) {
-            console.log(nextPage);
-            if (document.querySelector(`#content-p${nextPage}`)) {
-                testDownload(nextPage);
-            } else {
-                const downloadFunc = function() { testDownload(nextPage); speedbinb.removeEventListener('onPageRendered', downloadFunc); };
-                speedbinb.moveTo(nextPage - 1);
-                speedbinb.addEventListener('onPageRendered', downloadFunc);
-            }
-        }
-    }
-}
-*/
-
 function getPageBlob(pageNumber) {
     return new Promise(function(resolve, reject) {
         const speedbinb = SpeedBinb.getInstance('content');
@@ -307,7 +242,14 @@ function getPageBlob(pageNumber) {
         const pageHeight = pageInfo[pageNumber - 1].image.orgheight;
         const pageWidth = pageInfo[pageNumber - 1].image.orgwidth;
 
-        const imgs = document.querySelectorAll(`#content-p${pageNumber} img`);
+        const imgs = document.getElementById(`content-p${pageNumber}`).getElementsByTagName('img');
+
+        // Check to see if imgs are fully loaded
+        for (let i = 0; i < imgs.length; i++) {
+            if (!imgs[i].complete) {
+                console.log(`Error: img ${i} of page ${pageNumber} is not completely loaded!`);
+            }
+        }
 
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
@@ -326,35 +268,76 @@ function getPageBlob(pageNumber) {
     });
 }
 
-function moveToPage(pageNumber) {
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function waitUntilPageLoaded(pageNumber) {
+    const speedbinb = SpeedBinb.getInstance('content');
+    speedbinb.moveTo(pageNumber - 1);
+    while (!document.getElementById(`content-p${pageNumber}`)) {
+        await sleep(200);
+    }
+    while (!document.getElementById(`content-p${pageNumber}`).getElementsByTagName('img')) {
+        await sleep(200);
+    }
+    while (document.getElementById(`content-p${pageNumber}`).getElementsByTagName('img').length !== 3) {
+        await sleep(200);
+    }
+    const imgs = document.getElementById(`content-p${pageNumber}`).getElementsByTagName('img');
+    for (let i = 0; i < imgs.length; i++) {
+        while (!imgs[i].complete) {
+            sleep(200);
+        }
+    }
     return new Promise(function(resolve, reject) {
-        const speedbinb = SpeedBinb.getInstance('content');
-        const resolveFunc = () => { resolve(); speedbinb.removeEventListener('onPageRendered', resolveFunc); };
-        speedbinb.addEventListener('onPageRendered', resolveFunc);
-        speedbinb.moveTo(pageNumber - 1);
+        resolve();
     });
+}
+
+function toggleProgressBar() {
+    const progress = document.querySelector('#download-sidebar .progress');
+    const progressBar = document.querySelector('#download-sidebar .progress-bar');
+
+    if (progress.classList.contains('invisible')) {
+        progress.classList.remove('invisible');
+        progress.classList.add('visible');
+        progressBar.style.width = '0%';
+    } else if (progress.classList.contains('visible')) {
+        progress.classList.remove('visible');
+        progress.classList.add('invisible');
+        progressBar.style.width = '0%';
+    }
+}
+
+function updateProgressBar(percentage) {
+    const progressBar = document.querySelector('#download-sidebar .progress-bar');
+    progressBar.style.width = `${percentage}%`;
 }
 
 async function downloadComic(pageIntervals) {
     const zip = new JSZip();
     const downloadName = document.querySelector('#download-name-field').value;
 
+    toggleProgressBar();
+
+    let totalPages = 0;
+    for (let i = 0; i < pageIntervals.length; i++) {
+        totalPages += pageIntervals[i][1] - pageIntervals[i][0];
+    }
+
+    let downloadedPages = 0;
     const speedbinb = SpeedBinb.getInstance('content');
     for (let i = 0; i < pageIntervals.length; i++) {
         const interval = pageIntervals[i], start = 0, end = 1;
-
         for (let nextPage = interval[start]; nextPage <= interval[end]; nextPage++) {
-            console.log(nextPage);
-            if (document.querySelector(`#content-p${nextPage} img`)) {
-                const pageBlob = await getPageBlob(nextPage);
-                console.log(URL.createObjectURL(pageBlob));
-                zip.file(`${nextPage}.jpeg`, pageBlob);
-            } else {
-                await moveToPage(nextPage);
-                const pageBlob = await getPageBlob(nextPage);
-                console.log(URL.createObjectURL(pageBlob));
-                zip.file(`${nextPage}.jpeg`, pageBlob);
-            }
+            console.log(`Attempting download for page ${nextPage}...`);
+            await waitUntilPageLoaded(nextPage);
+            const pageBlob = await getPageBlob(nextPage);
+            console.log(pageBlob);
+            zip.file(`${nextPage}.jpeg`, pageBlob);
+            downloadedPages++;
+            updateProgressBar((downloadedPages / totalPages) * 100);
         }
     }
 
@@ -366,6 +349,8 @@ async function downloadComic(pageIntervals) {
             };
             GM_download(details);
     });
+
+    toggleProgressBar();
 
     const form = document.querySelector('#download-sidebar form');
     const elements = form.elements;
@@ -446,7 +431,7 @@ function addDownloadSidebar() {
          </ul>
          <form class="needs-validation" novalidate>
              <div class="mb-3">
-                 <label for="download-name-field" class="form-label">Download file name</label>
+                 <label for="download-name-field" class="form-label">Download Name</label>
                  <textarea type="text" id="download-name-field" name="download-name" class="form-control" placeholder="Leave blank for comic name"></textarea>
                  <div class="invalid-feedback">Special characters /\?%*:|"<>] are not allowed</div>
              </div>
@@ -459,8 +444,8 @@ function addDownloadSidebar() {
                  <button type="submit" class="btn btn-primary">Download</button>
              </div>
           </form>
-          <div class="progress">
-              <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 25%;" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100"></div>
+          <div class="progress invisible">
+              <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
           </div>
      </div>`;
     document.body.append(sidebar);
