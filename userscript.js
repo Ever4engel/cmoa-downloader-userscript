@@ -209,6 +209,8 @@ function submitForm(e) {
     for (let i = 0; i < elements.length; i++) {
         elements[i].readOnly = true;
     }
+    const downloadButton = form.querySelector('button[type="submit"]');
+    downloadButton.disabled = true;
     downloadComic(getPageIntervals());
 }
 
@@ -316,6 +318,10 @@ function updateProgressBar(percentage) {
 }
 
 async function downloadComic(pageIntervals) {
+    const stopProp = function(e) { e.preventDefault(); e.stopPropagation(); };
+    const sidebar = document.querySelector('#download-sidebar');
+    sidebar.addEventListener('hide.bs.offcanvas', stopProp, true);
+
     const zip = new JSZip();
     const downloadName = document.querySelector('#download-name-field').value;
 
@@ -328,6 +334,7 @@ async function downloadComic(pageIntervals) {
 
     let downloadedPages = 0;
     const speedbinb = SpeedBinb.getInstance('content');
+
     for (let i = 0; i < pageIntervals.length; i++) {
         const interval = pageIntervals[i], start = 0, end = 1;
         for (let nextPage = interval[start]; nextPage <= interval[end]; nextPage++) {
@@ -337,26 +344,36 @@ async function downloadComic(pageIntervals) {
             console.log(pageBlob);
             zip.file(`${nextPage}.jpeg`, pageBlob);
             downloadedPages++;
-            updateProgressBar((downloadedPages / totalPages) * 100);
+            updateProgressBar(Math.round((downloadedPages / totalPages) * 100));
         }
     }
 
-    zip.generateAsync({ type: 'blob' })
-        .then(function(content) {
-            const details = {
-                'url': URL.createObjectURL(content),
-                'name': `${downloadName}.zip`
-            };
-            GM_download(details);
+    zip.generateAsync({ type: 'blob' }, function updateCallback(metadata) {
+        console.log("progression: " + metadata.percent.toFixed(2) + " %");
+        updateProgressBar(Math.round(metadata.percent));
+        if(metadata.currentFile) {
+            console.log("current file = " + metadata.currentFile);
+        }
+    }).then(function(content) {
+        const details = {
+            'url': URL.createObjectURL(content),
+            'name': `${downloadName}.zip`
+        };
+        GM_download(details);
+
+        toggleProgressBar();
+
+        const form = document.querySelector('#download-sidebar form');
+        const elements = form.elements;
+        for (let i = 0; i < elements.length; i++) {
+            elements[i].readOnly = false;
+        }
+
+        const downloadButton = form.querySelector('button[type="submit"]');
+        downloadButton.disabled = false;
+
+        sidebar.removeEventListener('hide.bs.offcanvas', stopProp, true);
     });
-
-    toggleProgressBar();
-
-    const form = document.querySelector('#download-sidebar form');
-    const elements = form.elements;
-    for (let i = 0; i < elements.length; i++) {
-        elements[i].readOnly = false;
-    }
 }
 
 function addDownloadTab() {
@@ -413,7 +430,7 @@ function addDownloadSidebar() {
      <div class="offcanvas-body">
          <div class="alert alert-warning d-flex align-items-center" role="alert">
              <i class="fas fa-exclamation-triangle bi flex-shrink-0 me-2" width="24" height="24" role="img" aria-label="Warning"></i>
-             <div style="padding-left: 0.5em">Interacting with the reader is disabled while sidebar is open.</div>
+             <div id="warning" style="padding-left: 0.5em">Do not interact with the reader while download is in progress.</div>
          </div>
          <ul class="list-group mb-3">
              <li class="list-group-item" id="comic-title">
