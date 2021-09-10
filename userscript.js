@@ -209,7 +209,7 @@ function submitForm(e) {
     for (let i = 0; i < elements.length; i++) {
         elements[i].readOnly = true;
     }
-    const downloadButton = form.querySelector('button[type="submit"]');
+    const downloadButton = document.querySelector('#download-button');
     downloadButton.disabled = true;
     downloadComic(getPageIntervals());
 }
@@ -369,7 +369,7 @@ async function downloadComic(pageIntervals) {
             elements[i].readOnly = false;
         }
 
-        const downloadButton = form.querySelector('button[type="submit"]');
+        const downloadButton = document.querySelector('#download-button');
         downloadButton.disabled = false;
 
         sidebar.removeEventListener('hide.bs.offcanvas', stopProp, true);
@@ -446,22 +446,26 @@ function addDownloadSidebar() {
                  <div class="fw-bold">Page Count</div>
              </li>
          </ul>
-         <form class="needs-validation" novalidate>
+         <form id="download-options-form" class="needs-validation" novalidate>
              <div class="mb-3">
-                 <label for="download-name-field" class="form-label">Download Name</label>
+                 <label for="download-name-field" class="form-label">Download name</label>
                  <textarea type="text" id="download-name-field" name="download-name" class="form-control" placeholder="Leave blank for comic name"></textarea>
-                 <div class="invalid-feedback">Special characters /\?%*:|"<>] are not allowed</div>
+                 <div class="invalid-feedback">Special characters /\?%*:|"&lt;&gt;] are not allowed</div>
              </div>
-             <label for="pages-field" class="form-label">Pages</label>
              <div class="mb-3">
+                 <label for="pages-field" class="form-label">Pages</label>
                  <input type="text" id="pages-field" name="pages" class="form-control" placeholder="eg. 1-5, 8, 11-13">
                  <div class="invalid-feedback">Invalid page range, use eg. 1-5, 8, 11-13</div>
              </div>
              <div class="mb-3">
-                 <button type="submit" class="btn btn-primary">Download</button>
+                 <label for="scale-input" class="form-label">Scale (%)</label>
+                 <input type="number" id="scale-input" name="scale" class="form-control" min="1" max="100" placeholder="100">
              </div>
           </form>
-          <div class="progress invisible">
+     </div>
+     <div id="sidebar-footer" class="footer d-flex align-content-center position-absolute bottom-0 start-0 p-3">
+          <button type="submit" form="download-options-form" id="download-button" class="btn btn-primary">Download</button>
+          <div class="progress ms-3 invisible" style="flex-grow: 1">
               <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
           </div>
      </div>`;
@@ -481,6 +485,13 @@ function addDownloadSidebar() {
      }
      #download-sidebar h5 {
          margin-bottom: 0;
+     }
+     #sidebar-footer {
+         border-top: 1px solid var(--bs-gray-300);
+         width: 100%;
+     }
+     .offcanvas-body {
+         margin-bottom: 71px;
      }`;
     GM_addStyle(sidebarCss);
 }
