@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         cmoa.jp Downloader
-// @namespace    https://amytruong.dev/
-// @version      0.1
+// @name         Ever's cmoa.jp Downloader
+// @namespace    Ever's domain
+// @version      0.5
 // @description  Downloads comic pages from cmoa.jp
-// @author       Amy Truong
+// @author       Ever4engel
 // @match        *://*.cmoa.jp/bib/speedreader/speed.html?cid=*&u0=*&u1=*
 // @icon         https://www.google.com/s2/favicons?domain=tampermonkey.net
 // @grant        GM_addStyle
